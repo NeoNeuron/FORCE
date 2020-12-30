@@ -5,6 +5,13 @@
 #
 # MATLAB vertion written by David Sussillo
 # Modified by Kai Chen
+#
+# Benchmarks:	
+# 	2 pattern case
+# 	pure numpy version: 	96.001 s
+#	PyTorch CUDA version: 	16.001 s
+#	PyTorch CPU version: 	31.121 s
+
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -13,11 +20,19 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import itertools
 import time
+import torch
+
+if torch.cuda.is_available(): 	   # device agnostic code
+    device = torch.device('cuda')  # and modularity
+else:                              #
+    device = torch.device('cpu')   #
 
 mpl.rcParams['lines.linewidth'] = 3
 mpl.rcParams['font.size'] = 14
 mpl.rcParams['font.weight'] = 'bold'
 
+torch.cuda.synchronize()
+t0 = time.time()
 N = 1000
 n_input = 100
 p = 0.1
@@ -32,18 +47,20 @@ M = np.random.rand(N,N)
 M = (M<p).astype(int)
 scale = 1.0/np.sqrt(p*N)
 M = M * g*scale * np.random.randn(N,N)
-M_spa = csr_matrix(M)
+M = torch.Tensor(M).to(device)
+# M_spa = csr_matrix(M)
 
 nRec2Out = N
-wo = np.zeros(nRec2Out)
-dw = np.zeros(nRec2Out)
-wf = 2.0*(np.random.rand(N)-0.5)
+wo = torch.zeros(nRec2Out).to(device)
+dw = torch.zeros(nRec2Out).to(device)
+wf = 2.0*(torch.rand(N)-0.5).to(device)
 
 # generate connectivity matrix for control inputs
 J_GI = np.zeros((N, n_input))
 col_indices = np.random.randint(n_input, size=N)
 J_GI[np.arange(N, dtype=int), col_indices] = np.random.randn(N)
-J_GI_spa = csr_matrix(J_GI)
+J_GI = torch.Tensor(J_GI).to(device)
+# J_GI_spa = csr_matrix(J_GI)
 
 # print simulation setting
 print('\tN: %d' % N)
@@ -65,7 +82,7 @@ def gen_target(amps, freqs, time):
 	return ft
 
 options = list(itertools.permutations([1.0,2.0,3.0,6.0],4))
-n_options = 2
+n_options = 10
 options = options[:n_options]
 training_len = simtime_len * len(options)
 amps = [1.3/np.array(item) for item in options]
@@ -90,41 +107,31 @@ for val in random_sample:
 	ft = np.hstack((ft, fts_test[val])) 
 	input_bias = np.vstack((input_bias, np.tile(input_bias_set[val], (single_len, 1))))
 
+# convert to GPU memory
+ft = torch.Tensor(ft).to(device)
+input_bias = torch.Tensor(input_bias).to(device)
+
 simtime_len = len(ft)
 simtime = np.arange(simtime_len) * dt
 
-# wo_len = np.zeros(simtime_len)
-# zt = np.zeros(simtime_len)
-wo_len = []
-zt = []
-x0 = 0.5*np.random.randn(N)
-z0 = 0.5*np.random.randn()
+wo_len = torch.zeros(simtime_len).to(device)
+zt = torch.zeros(simtime_len).to(device)
+x0 = 0.5*torch.randn(N).to(device)
+z0 = 0.5*torch.randn(1).to(device)
 
 x = x0 
-r = np.tanh(x)
+r = torch.tanh(x)
 z = z0
 
-# prepare image container
-video_duration = 100000	# ms
-frame_interval = 200
-nframe = int(len(simtime)/frame_interval)
-frame_interval_time = int(video_duration/nframe)
-# training_imgs = np.zeros((nframe,simtime_len))
-# weight_imgs = np.zeros((nframe,simtime_len))
-training_imgs = []
-weight_imgs = []
-
+P = (1.0/alpha)*torch.eye(nRec2Out).to(device)
+torch.cuda.synchronize()
+print(f'matrix init takes {time.time()-t0:.3f} s')
+torch.cuda.synchronize()
 t0 = time.time()
-P = (1.0/alpha)*np.eye(nRec2Out)
 for ti in np.arange(simtime_len):
-	if ti % frame_interval == 0:
-		# record current training state
-		training_imgs.append(zt.copy())
-		weight_imgs.append(wo_len.copy())
-		# frame_id += 1
     # sim, so x(t) and r(t) are created.
-	x += dt * (-x + M_spa @ r + wf*z + J_GI_spa@input_bias[ti])
-	r = np.tanh(x)
+	x += dt * (-x + M @ r + wf*z + J_GI@input_bias[ti])
+	r = torch.tanh(x)
 	z = wo @ r
     
 	if ((ti+1) % learn_every) == 0 and ti < training_len:
@@ -132,7 +139,7 @@ for ti in np.arange(simtime_len):
 		k = P @ r
 		rPr = r @ k
 		c = 1.0/(1.0 + rPr)
-		P -= c *np.outer(k,k)
+		P -= c *torch.outer(k,k)
 		
 		# update the error for the linear readout
 		e = z-ft[ti]
@@ -142,76 +149,35 @@ for ti in np.arange(simtime_len):
 		wo += dw
     
     # Store the output of the system.
-	# zt[ti] = z
-	# wo_len[ti] = np.sqrt(wo@wo)	
-	zt.append(z)
-	wo_len.append(np.sqrt(wo@wo))
+	zt[ti] = z
+	wo_len[ti] = torch.sqrt(wo@wo)	
 
-print(f'it tooks {time.time()-t0:5.3f} s')
-# adding last frame
-training_imgs.append(zt.copy())
-weight_imgs.append(wo_len.copy())
-zt = np.array(zt)
-wo_len = np.array(wo_len)
+torch.cuda.synchronize()
+print(f'evolve dynamics takes {time.time()-t0:.3f} s')
 
-x_range = 2000
-xmax = x_range
-dx = x_range / 2
-
-fig, ax = plt.subplots(2,1, figsize=(20,10))
-ax[0].plot(simtime, ft, color='green', label='f')
-line1 = ax[0].plot(simtime, zt, color='red', label='z')[0]
-ax[0].axvline(simtime[training_len-1],color='cyan', label='End of Training')
-ax[0].set_xlim(0, xmax)
-ax[0].set_title('Training')
-ax[0].legend(loc=2)
-ax[0].set_xlabel('Time')
-ax[0].set_ylabel(r'$f$ and $z$')
-
-line2 = ax[1].plot(simtime, wo_len, label='|w|')[0]
-ax[1].axvline(simtime[training_len-1],color='cyan', label='End of Training')
-ax[1].set_xlim(0, xmax)
-ax[1].set_xlabel('Time')
-ax[1].set_ylabel(r'|$w$|')
-ax[1].legend(loc=2)
-plt.tight_layout()
-
-def init():  # only required for blitting to give a clean slate.
-    line1.set_ydata([np.nan] * len(zt))
-    line2.set_ydata([np.nan] * len(wo_len))
-
-def animate(i):
-	line1.set_data(np.arange(len(training_imgs[i]))*dt, training_imgs[i])
-	line2.set_data(np.arange(len(weight_imgs[i]))*dt, weight_imgs[i])
-	global xmax
-	if len(training_imgs[i]) > xmax / dt:
-		xmax += dx
-		ax[0].set_xlim(xmax - x_range, xmax)
-		ax[1].set_xlim(xmax - x_range, xmax)
-
-
-ani = FuncAnimation(fig, animate, init_func = init, interval=frame_interval_time, frames=nframe)
-
-ani.save('training_dynamic.mp4')
+ft_cpu = np.array(ft.cpu(), dtype=float)
+wo_len_cpu = np.array(wo_len.cpu(), dtype=float)
+zt_cpu = np.array(zt.cpu(), dtype=float)
+np.savez('test_tmp_data_multitask.npz', ft=ft_cpu, wo_len=wo_len_cpu, zt = zt_cpu)
 
 # print training error
-error_avg = np.sum(np.abs(zt[:int(simtime_len/2)]-ft[:int(simtime_len/2)]))/simtime_len*2
-print(f'Training MAE:  {error_avg:3f}')    
+error_avg = torch.sum(torch.abs(zt[:int(simtime_len/2)]-ft[:int(simtime_len/2)]))/simtime_len*2
+print(f'Training MAE:  {error_avg.cpu():3f}')    
 
-error_avg = np.sum(np.abs(zt[int(simtime_len/2):]-ft[int(simtime_len/2):]))/simtime_len*2
-print(f'Testing MAE:  {error_avg:3f}')
+error_avg = torch.sum(torch.abs(zt[int(simtime_len/2):]-ft[int(simtime_len/2):]))/simtime_len*2
+print(f'Testing MAE:  {error_avg.cpu():3f}')
 
 # save final frame as figure
 fig2, ax2 = plt.subplots(2,1,figsize=(20,10))
-ax2[0].plot(simtime, ft, color='green', label='f')
-ax2[0].plot(simtime, zt, color='red', label='z')
+ax2[0].plot(simtime, ft_cpu, color='green', label='f')
+ax2[0].plot(simtime, zt_cpu, color='red', label='z')
 ax2[0].set_title('Training')
 ax2[0].set_xlabel('Time')
 ax2[0].set_ylabel(r'$f$ and $z$')
 ax2[0].axvline(simtime[training_len],color='cyan')
 ax2[0].legend()
 
-ax2[1].plot(simtime, wo_len, label='|w|')[0]
+ax2[1].plot(simtime, wo_len_cpu, label='|w|')[0]
 ax2[1].set_xlabel('Time')
 ax2[1].set_ylabel(r'|$w$|')
 ax2[1].axvline(simtime[training_len],color='cyan')
@@ -219,4 +185,4 @@ ax2[1].legend()
 plt.tight_layout()
 
 plt.savefig('Figure3.png')
-np.savez(f'trained_net_{n_options:d}.npz', Jgg=M, Jgi=J_GI, I = input_bias_set, w=wo, wf = wf, options = options)
+np.savez(f'trained_net_{n_options:d}.npz', Jgg=M.cpu(), Jgi=J_GI.cpu(), I = input_bias_set, w=wo.cpu(), wf = wf.cpu(), options = options)
