@@ -6,6 +6,7 @@
 # MATLAB vertion written by David Sussillo
 # Modified by Kai Chen
 
+
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -13,7 +14,7 @@ from multiprocessing import Pool
 import time
 from scipy.sparse import csr_matrix
 
-mpl.rcParams['lines.linewidth'] = 3
+mpl.rcParams['lines.linewidth'] = 2
 mpl.rcParams['font.size'] = 14
 mpl.rcParams['font.weight'] = 'bold'
 
@@ -90,15 +91,16 @@ def single_init_test(seed:int)->np.ndarray:
 	return corr
 
 
-# Test single trial
+# # Single trial benchmark
 # t0 = time.time()
 # corr = single_init_test(100)
 # print(f'it tooks {time.time()-t0:5.3f} s')
 # print(corr)
 
+t0 = time.time()
 reps = 100
 # multiprocessing 
-pn = 10
+pn = None
 p = Pool(pn)
 result = [p.apply_async(func = single_init_test,args=(i,)) for i in range(reps)]
 p.close()
@@ -109,12 +111,13 @@ for res in result:
 	corr[i,:] = res.get()
 	i += 1
 np.save('init_test_result.npy', corr)
+# corr = np.load('init_test_result.npy')
 
+print(f'evolve dynamics takes {time.time()-t0:.3f} s')
 
 fig, ax = plt.subplots(1,1)
-ax.plot(np.arange(1, len(input_bias_set)+1), corr.mean(0), color='b', label='correlation', yerr=corr.std(0))
+ax.boxplot(corr)
 ax.set_ylabel('Correlation coefficient')
-ax.legend(loc=2)
 ax.set_xlabel('Index of input patterns')
 
 plt.tight_layout()

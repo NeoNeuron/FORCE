@@ -77,6 +77,7 @@ x0 = 0.5*torch.randn(N).to(device)
 z0 = 0.5*torch.randn(1).to(device)
 
 zt_total = []
+torch.cuda.synchronize()
 t0 = time.time()
 for iter in range(len(input_bias_set)):
 	zt = torch.zeros(simtime_len).to(device)
@@ -93,6 +94,7 @@ for iter in range(len(input_bias_set)):
 		zt[ti]=z
 	zt_total.append(np.array(zt.cpu()))
 
+torch.cuda.synchronize()
 print(f'evolve dynamics takes {time.time()-t0:.3f} s')
 
 fts_cpu = np.array([np.array(ft.cpu()) for ft in fts])

@@ -14,10 +14,8 @@
 
 
 import numpy as np
-from scipy.sparse import csr_matrix
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 import itertools
 import time
 import torch
@@ -38,9 +36,10 @@ n_input = 100
 p = 0.1
 g = 1.5		# g greater than 1 leads to chaotic networks.
 alpha = 0.0125
-nsecs_train = 1920
+nsecs_train = 2400
 dt = 0.1
 learn_every = 2
+test_toggle = False
 
 # sparse matrix M
 M = np.random.rand(N,N)
@@ -48,7 +47,6 @@ M = (M<p).astype(int)
 scale = 1.0/np.sqrt(p*N)
 M = M * g*scale * np.random.randn(N,N)
 M = torch.Tensor(M).to(device)
-# M_spa = csr_matrix(M)
 
 nRec2Out = N
 wo = torch.zeros(nRec2Out).to(device)
@@ -60,7 +58,6 @@ J_GI = np.zeros((N, n_input))
 col_indices = np.random.randint(n_input, size=N)
 J_GI[np.arange(N, dtype=int), col_indices] = np.random.randn(N)
 J_GI = torch.Tensor(J_GI).to(device)
-# J_GI_spa = csr_matrix(J_GI)
 
 # print simulation setting
 print('\tN: %d' % N)
@@ -83,17 +80,22 @@ def gen_target(amps, freqs, time):
 
 options = list(itertools.permutations([1.0,2.0,3.0,6.0],4))
 n_options = 10
-options = options[:n_options]
+rg = np.random.Generator(np.random.MT19937(0))
+choice = rg.choice(np.arange(len(options)), n_options, replace=False)
+# options = options[:n_options]
+options = [options[idx] for idx in choice]
+
+# shifting order again
+order = np.arange(n_options, dtype=int)
+rg.shuffle(order)
+options = [options[idx] for idx in order]
+
 training_len = simtime_len * len(options)
 amps = [1.3/np.array(item) for item in options]
-# amps1 = 1.3 / np.array([1.0, 2.0, 6.0, 3.0])
-# amps2 = 1.3 / np.array([6.0, 1.0, 2.0, 3.0])
 freqs = 1/60 * np.array([1.0, 2.0, 3.0, 4.0])
 
 fts_train = [gen_target(amp, freqs, simtime) for amp in amps]
-# ft2 = gen_target(amps2, freqs, simtime)
 fts_test = [gen_target(amp, freqs, np.arange(0,720,dt)) for amp in amps]
-# ft2_single = gen_target(amps2, freqs, np.arange(0,360,dt))
 single_len = len(fts_test[0])
 ft = np.hstack(fts_train)
 
@@ -101,11 +103,13 @@ input_bias_set = 1.6*(np.random.rand(len(options), n_input)-0.5)
 input_bias = np.repeat(input_bias_set, simtime_len, axis=0)
 
 # generate test samples
-# random_sample = np.random.randint(len(options), size=20)
-random_sample = np.repeat(np.arange(n_options),2)
-for val in random_sample:
-	ft = np.hstack((ft, fts_test[val])) 
-	input_bias = np.vstack((input_bias, np.tile(input_bias_set[val], (single_len, 1))))
+# ---------------------
+if test_toggle:
+	# random_sample = np.random.randint(len(options), size=20)
+	random_sample = np.repeat(np.arange(n_options),2)
+	for val in random_sample:
+		ft = np.hstack((ft, fts_test[val])) 
+		input_bias = np.vstack((input_bias, np.tile(input_bias_set[val], (single_len, 1))))
 
 # convert to GPU memory
 ft = torch.Tensor(ft).to(device)
@@ -155,10 +159,12 @@ for ti in np.arange(simtime_len):
 torch.cuda.synchronize()
 print(f'evolve dynamics takes {time.time()-t0:.3f} s')
 
+# save trained model parameters
 ft_cpu = np.array(ft.cpu(), dtype=float)
 wo_len_cpu = np.array(wo_len.cpu(), dtype=float)
 zt_cpu = np.array(zt.cpu(), dtype=float)
 np.savez('test_tmp_data_multitask.npz', ft=ft_cpu, wo_len=wo_len_cpu, zt = zt_cpu)
+np.savez(f'trained_net_{n_options:d}.npz', Jgg=M.cpu(), Jgi=J_GI.cpu(), I = input_bias_set, w=wo.cpu(), wf = wf.cpu(), options = options, order = order)
 
 # print training error
 error_avg = torch.sum(torch.abs(zt[:int(simtime_len/2)]-ft[:int(simtime_len/2)]))/simtime_len*2
@@ -174,15 +180,14 @@ ax2[0].plot(simtime, zt_cpu, color='red', label='z')
 ax2[0].set_title('Training')
 ax2[0].set_xlabel('Time')
 ax2[0].set_ylabel(r'$f$ and $z$')
-ax2[0].axvline(simtime[training_len],color='cyan')
+ax2[0].axvline(simtime[training_len-1],color='cyan')
 ax2[0].legend()
 
 ax2[1].plot(simtime, wo_len_cpu, label='|w|')[0]
 ax2[1].set_xlabel('Time')
 ax2[1].set_ylabel(r'|$w$|')
-ax2[1].axvline(simtime[training_len],color='cyan')
+ax2[1].axvline(simtime[training_len-1],color='cyan')
 ax2[1].legend()
 plt.tight_layout()
 
 plt.savefig('Figure3.png')
-np.savez(f'trained_net_{n_options:d}.npz', Jgg=M.cpu(), Jgi=J_GI.cpu(), I = input_bias_set, w=wo.cpu(), wf = wf.cpu(), options = options)
