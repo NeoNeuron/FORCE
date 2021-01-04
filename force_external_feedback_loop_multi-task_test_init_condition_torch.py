@@ -19,10 +19,10 @@
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-# from multiprocessing import Pool
 import torch.multiprocessing as mp
 import time
 import torch
+import json
 
 if torch.cuda.is_available(): 	   # device agnostic code
     device = torch.device('cuda')  # and modularity
@@ -35,19 +35,26 @@ mpl.rcParams['font.size'] = 14
 mpl.rcParams['font.weight'] = 'bold'
 
 # load parameters
-params = np.load('trained_net_10.npz')
+with open('net_10_cfg.json', 'r') as read_file:
+	pm = json.load(read_file)
+n_targets = pm['n_targets']
+fname = f'net_{n_targets:d}_hyper.npz'
+params = np.load(fname)
 M=params['Jgg']
 J_GI=params['Jgi']
 input_bias_set = np.array(params['I'])
-wo = params['w']
-options = params['options']
 wf = params['wf']
 
-N = M.shape[0]
-n_input = J_GI.shape[1]
-dt = 0.1
-nRec2Out = N
+training_dym_data = np.load(f'net_{n_targets:d}_training_dynamics.npz')
+wo = training_dym_data['wt'][-1,:]
+
+N = pm['N'] 
+n_input = pm['n_input']
+dt = pm['dt']
+n_rec2out = pm['n_rec2out']
 nsecs = 1200
+
+# create tensor in CUDA
 M = torch.Tensor(M).to(device)
 J_GI = torch.Tensor(J_GI).to(device)
 wo = torch.Tensor(wo).to(device)
@@ -56,25 +63,18 @@ wf = torch.Tensor(wf).to(device)
 simtime = np.arange(0,nsecs,dt)
 simtime_len = len(simtime)
 
-def gen_target(amps, freqs, time):
-	ft = np.zeros_like(time)
-	for amp, freq in zip(amps, freqs):
-		ft += amp*np.sin(np.pi*freq*time)
-	ft = ft/1.5
-	return ft
-
-amps = [1.3/np.array(item) for item in options]
-freqs = 1/60 * np.array([1.0, 2.0, 3.0, 4.0])
-
-fts = [torch.Tensor(gen_target(amp, freqs, simtime)).to(device) for amp in amps]
+from gen_patterns import gen_random, gen_sequential
+# fts = gen_random(num=n_targets, seed=pm['seed'], time = simtime)
+fts = gen_sequential(num=n_targets, time = simtime)
 single_len = len(fts[0])
+fts = torch.Tensor(np.array(fts)).to(device)
 
 input_bias = np.repeat(input_bias_set.reshape((input_bias_set.shape[0], 1, input_bias_set.shape[1])), 
 						simtime_len, axis=1)
 
 input_bias = torch.Tensor(input_bias).to(device)
 
-def scan_corrcoef(x:torch.Tensor, y:torch.Tensor)->float:
+def scan_corrcoef(x:torch.Tensor, y:torch.Tensor, arg:bool=False)->float:
 	# define corrcoef for cuda
 	def corrcoef(x:torch.Tensor, y:torch.Tensor)->torch.Tensor:
 		return ((x*y).mean() - x.mean()*y.mean())/x.std()/y.std()
@@ -82,7 +82,12 @@ def scan_corrcoef(x:torch.Tensor, y:torch.Tensor)->float:
 	buffer = np.zeros(int(120/dt))
 	for i in np.arange(1, len(buffer)+1):
 		buffer[i-1] = corrcoef(x[i:], y[:-i]).cpu()	
-	return buffer[~np.isnan(buffer)].max()
+	val_max = buffer[~np.isnan(buffer)].max()
+	if arg:
+		arg_max = np.argwhere(buffer==val_max)[0,0]
+		return val_max, arg_max
+	else:
+		return val_max
 
 def single_init_test(seed:int)->np.ndarray:
 	# initialize randomness
@@ -130,7 +135,7 @@ if __name__  == '__main__':
 	for res in result:
 		corr[i,:] = res.get()
 		i += 1
-	np.save('init_test_result.npy', corr)
+	np.save(f'net{n_targets:d}_init_test_result.npy', corr)
 
 	torch.cuda.synchronize()
 	print(f'evolve dynamics takes {time.time()-t0:.3f} s')
