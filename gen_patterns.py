@@ -71,8 +71,8 @@ if __name__ == '__main__':
     ax = ax.flatten()
     fts = gen_sequential(time=time)
     for i in range(len(fts)):
-        ax[i].plot(time, fts[i], lw=3)
-        ax[i].set_title(f'Patten {i:d}', fontsize=30)
+        ax[i].plot(time, fts[i], lw=3, color='navy')
+        ax[i].set_title(f'Patten {i+1:d}', fontsize=30)
     # Remove frame edges
     for axi in ax:
         make_ax_style(axi)

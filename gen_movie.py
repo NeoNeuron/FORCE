@@ -18,9 +18,11 @@ t0 = time.time()
 
 # load data 
 # ------------
-raw_data = np.load('test_tmp_data_multitask.npz')
+fname = 'net_10_training_dynamics.npz'
+raw_data = np.load(fname)
 ft = raw_data['ft']
-wo_len = raw_data['wo_len']
+wt = raw_data['wt']
+wo_len = np.sqrt(np.sum(wt**2,axis=1))
 zt = raw_data['zt']
 
 dt = 0.1
@@ -82,6 +84,6 @@ def animate(i):
 
 ani = FuncAnimation(fig, animate, interval=frame_interval_time, frames=nframe)
 
-ani.save('training_dynamic.mp4')
+ani.save(f"{fname.split('.')[0]:s}.mp4")
 
 print(f'generating animation takes {time.time()-t0:.3f} s')
