@@ -1,0 +1,14 @@
+# ignore directories
+.DS_Store
+__pycache__
+.vscode
+
+# ignore file types
+*.pdf
+*.mp4
+*.npy
+*.npz
+*.json
+*.png
+*.avi
+*.mpg

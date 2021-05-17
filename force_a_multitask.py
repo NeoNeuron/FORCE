@@ -39,7 +39,7 @@ n_input = param['n_input'] = 100
 p = param['p'] = 0.1
 g = param['g'] = 1.5		# g greater than 1 leads to chaotic networks.
 alpha = param['alpha'] = 0.0125
-nsecs_train = param['nsecs_train'] = 2400
+nsecs_train = param['nsecs_train'] = 3400
 dt = param['dt'] = 0.1
 learn_every = param['learn_every'] = 2
 
@@ -75,7 +75,7 @@ simtime_len = len(simtime)
 
 from gen_patterns import gen_random, gen_sequential
 
-n_targets = param['n_targets'] = 10
+n_targets = param['n_targets'] = 4
 seed = param['seed'] = 0
 # fts_train = gen_random(num=n_targets, seed=seed, time=simtime)
 fts_train = gen_sequential(num=n_targets, time=simtime)
@@ -109,9 +109,9 @@ zt = torch.zeros(simtime_len).to(device)
 x0 = 0.5*torch.randn(N).to(device)
 z0 = 0.5*torch.randn(1).to(device)
 
-x = x0 
+x = x0.clone()
 r = torch.tanh(x)
-z = z0
+z = z0.clone()
 
 P = (1.0/alpha)*torch.eye(n_rec2out).to(device)
 torch.cuda.synchronize()
@@ -150,11 +150,11 @@ print(f'evolve dynamics takes {time.time()-t0:.3f} s')
 ft_cpu = np.array(ft.cpu(), dtype=float)
 wt_cpu = np.array(wt.cpu(), dtype=float)
 zt_cpu = np.array(zt.cpu(), dtype=float)
-with open(f'net_{n_targets:d}_cfg.json', 'w') as write_file:
+with open(f'multi-task_{n_targets:d}_cfg.json', 'w') as write_file:
     json.dump(param, write_file, indent=2)
-np.savez(f'net_{n_targets:d}_hyper.npz', Jgg=M.cpu(), Jgi=J_GI.cpu(), I = input_bias_set, wf = wf.cpu())
+np.savez(f'multi-task_{n_targets:d}_net_hyper_pm.npz', Jgg=M.cpu(), Jgi=J_GI.cpu(), I = input_bias_set, wf = wf.cpu())
 
-np.savez(f'net_{n_targets:d}_training_dynamics.npz', ft=ft_cpu, wt=wt_cpu, zt = zt_cpu)
+np.savez(f'multi-task_{n_targets:d}_training_dynamics.npz', ft=ft_cpu, wt=wt_cpu, zt = zt_cpu)
 
 
 # print training error
@@ -176,4 +176,4 @@ ax2[1].set_ylabel(r'|$w$|')
 ax2[1].legend()
 plt.tight_layout()
 
-plt.savefig('Figure3_training.png')
+plt.savefig('FORCE_Type_A_Multitask_Training.png')

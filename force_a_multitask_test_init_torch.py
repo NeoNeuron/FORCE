@@ -35,17 +35,17 @@ mpl.rcParams['font.size'] = 14
 mpl.rcParams['font.weight'] = 'bold'
 
 # load parameters
-with open('net_10_cfg.json', 'r') as read_file:
+with open('multi-task_10_cfg.json', 'r') as read_file:
 	pm = json.load(read_file)
 n_targets = pm['n_targets']
-fname = f'net_{n_targets:d}_hyper.npz'
+fname = f'multi-task_{n_targets:d}_net_hyper_pm.npz'
 params = np.load(fname)
 M=params['Jgg']
 J_GI=params['Jgi']
 input_bias_set = np.array(params['I'])
 wf = params['wf']
 
-training_dym_data = np.load(f'net_{n_targets:d}_training_dynamics.npz')
+training_dym_data = np.load(f'multi-task_{n_targets:d}_training_dynamics.npz')
 wo = training_dym_data['wt'][-1,:]
 
 N = pm['N'] 
@@ -77,10 +77,14 @@ input_bias = torch.Tensor(input_bias).to(device)
 def scan_corrcoef(x:torch.Tensor, y:torch.Tensor, arg:bool=False)->float:
 	# define corrcoef for cuda
 	def corrcoef(x:torch.Tensor, y:torch.Tensor)->torch.Tensor:
-		return ((x*y).mean() - x.mean()*y.mean())/x.std()/y.std()
+		cov = (x*y).mean() - x.mean()*y.mean()
+		if cov.abs() <= 1e-5:
+			return cov
+		else:
+			return cov/x.std()/y.std()
 	# scan across time delay
 	buffer = np.zeros(int(120/dt))
-	for i in np.arange(1, len(buffer)+1):
+	for i in np.arange(len(buffer))+1:
 		buffer[i-1] = corrcoef(x[i:], y[:-i]).cpu()	
 	val_max = buffer[~np.isnan(buffer)].max()
 	if arg:
@@ -99,9 +103,9 @@ def single_init_test(seed:int)->np.ndarray:
 
 	for iter in range(len(input_bias_set)):
 		zt = torch.zeros(simtime_len).to(device)
-		x = x0 
+		x = x0.clone()
 		r = torch.tanh(x)
-		z = z0
+		z = z0.clone()
 		for ti in np.arange(simtime_len):
 			# sim, so x(t) and r(t) are created.
 			x += dt * (-x + M @ r + wf*z + J_GI@input_bias[iter,ti])
@@ -111,11 +115,14 @@ def single_init_test(seed:int)->np.ndarray:
 			# Store the output of the system.
 			zt[ti]=z
 		# save last frame
-		zt_total.append(zt)
+		zt_total.append(zt.clone())
 
 	corr = np.zeros(len(fts))
 	for idx, ft in enumerate(fts):
 		corr[idx] = scan_corrcoef(ft[int(simtime_len/2):], zt_total[idx][int(simtime_len/2):])
+		if corr[idx] > 1:
+			np.save('dbg_tmp_data.npy', np.array([np.array(item.to('cpu')) for item in zt_total]))
+			raise RuntimeError(f'Corr greater than 1. No. {seed:d} trials')
 	return corr
 
 if __name__  == '__main__':
@@ -135,7 +142,7 @@ if __name__  == '__main__':
 	for res in result:
 		corr[i,:] = res.get()
 		i += 1
-	np.save(f'net{n_targets:d}_init_test_result.npy', corr)
+	np.save(f'multi-task_{n_targets:d}_init_test_result.npy', corr)
 
 	torch.cuda.synchronize()
 	print(f'evolve dynamics takes {time.time()-t0:.3f} s')
@@ -147,4 +154,4 @@ if __name__  == '__main__':
 
 	plt.tight_layout()
 
-	plt.savefig('Figure3_test_init.png')
+	plt.savefig('FORCE_Type_A_Multitask_init_test.png')

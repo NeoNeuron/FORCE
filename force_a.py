@@ -65,9 +65,9 @@ zt = np.zeros(simtime_len)
 x0 = 0.5*np.random.randn(N)
 z0 = 0.5*np.random.randn()
 
-x = x0 
+x = x0.copy()
 r = np.tanh(x)
-z = z0
+z = z0.copy()
 
 # prepare image container
 video_duration = 5000	# ms
@@ -174,4 +174,4 @@ ax2[1].axvline(simtime[simtime_train_len],color='cyan')
 ax2[1].legend()
 plt.tight_layout()
 
-plt.savefig('Figure3.png')
+plt.savefig('FORCE_Type_A.png')

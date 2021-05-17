@@ -13,19 +13,24 @@ import matplotlib.pyplot as plt
 from multiprocessing import Pool
 import time
 from scipy.sparse import csr_matrix
+import json
 
 mpl.rcParams['lines.linewidth'] = 2
 mpl.rcParams['font.size'] = 14
 mpl.rcParams['font.weight'] = 'bold'
 
 # load parameters
-params = np.load('trained_net_10.npz')
+params = np.load('multi-task-10_net_hyper_pm.npz')
 M=params['Jgg']
 J_GI=params['Jgi']
 input_bias_set = np.array(params['I'])
-wo = params['w']
-options = params['options']
 wf = params['wf']
+# trained parameters
+training_dym_data = np.load(f'multi-task_{n_targets:d}_training_dynamics.npz')
+wo = training_dym_data['wt'][-1,:]
+
+with open('multi-task_10_cfg.json', 'r') as read_file:
+	cfg_pm = json.load(read_file)
 
 # create sparse version of variables
 M_spa = csr_matrix(M)
@@ -71,9 +76,9 @@ def single_init_test(seed:int)->np.ndarray:
 
 	for iter in range(len(input_bias_set)):
 		zt = []
-		x = x0 
+		x = x0.copy()
 		r = np.tanh(x)
-		z = z0
+		z = z0.copy()
 		for ti in np.arange(simtime_len):
 			# sim, so x(t) and r(t) are created.
 			x += dt * (-x + M_spa @ r + wf*z + J_GI_spa@input_bias[iter,ti])
@@ -110,7 +115,7 @@ i = 0
 for res in result:
 	corr[i,:] = res.get()
 	i += 1
-np.save('init_test_result.npy', corr)
+np.save(f'multi-task_{:d}init_test_result.npy', corr)
 # corr = np.load('init_test_result.npy')
 
 print(f'evolve dynamics takes {time.time()-t0:.3f} s')
@@ -121,5 +126,4 @@ ax.set_ylabel('Correlation coefficient')
 ax.set_xlabel('Index of input patterns')
 
 plt.tight_layout()
-
-plt.savefig('Figure3_test_init.png')
+plt.savefig('FORCE_Type_A_Multitask_init_test.png')

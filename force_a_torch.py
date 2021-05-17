@@ -66,16 +66,18 @@ simtime_train_len = int(simtime_len/nsecs*nsecs_train)
 
 from gen_patterns import gen_target
 amps = 1.3 / np.array([1.0, 2.0, 6.0, 3.0])
+# amps = 1.3 / np.array([6.0, 2.0, 1.0, 3.0])
 ft = torch.Tensor(gen_target(amps, simtime)).to(device)
 
+torch.manual_seed(0)
 wt = torch.zeros((simtime_len,n_rec2out)).to(device)
 zt = torch.zeros(simtime_len).to(device)
 x0 = 0.5*torch.randn(N).to(device)
 z0 = 0.5*torch.randn(1).to(device)
 
-x = x0 
+x = x0.clone()
 r = torch.tanh(x)
-z = z0
+z = z0.clone()
 
 P = (1.0/alpha)*torch.eye(n_rec2out).to(device)
 torch.cuda.synchronize()
@@ -86,9 +88,10 @@ for ti in np.arange(len(simtime)):
     # sim, so x(t) and r(t) are created.
 	# delayed and nonlinear distortion
 	# if ti >=10:
-	# 	x += dt*(-x+M@r+wf*1.3*np.tanh(np.sin(np.pi*zt[ti-10])))
+	# 	x += dt*(-x+M@r+wf*1.3*torch.tanh(torch.sin(np.pi*zt[ti-10])))
 	# else:
 	# 	x += dt * (-x + M @ r)
+	# x += dt*(-x+M@r+wf*1.3*torch.tanh(torch.sin(np.pi*zt[ti])))
 	x += dt * (-x + M @ r + wf*z)
 	r = torch.tanh(x)
 	z = wo @ r
@@ -118,11 +121,11 @@ print(f'evolve dynamics takes {time.time()-t0:.3f} s')
 ft_cpu = np.array(ft.cpu(), dtype=float)
 wt_cpu = np.array(wt.cpu(), dtype=float)
 zt_cpu = np.array(zt.cpu(), dtype=float)
-with open(f'net_1_cfg.json', 'w') as write_file:
+with open(f'single-task_cfg.json', 'w') as write_file:
     json.dump(param, write_file, indent=2)
-np.savez('net_1_training_dynamics.npz', ft=ft_cpu, wt=wt_cpu, zt = zt_cpu)
+np.savez('single-task_training_dynamics.npz', ft=ft_cpu, wt=wt_cpu, zt = zt_cpu)
 
-np.savez('net_1_hyper.npz', Jgg=M.cpu(), wf = wf.cpu())
+np.savez('single-task_net_hyper_pm.npz', Jgg=M.cpu(), wf = wf.cpu())
 
 # print training error
 error_avg = torch.sum(torch.abs(zt[:simtime_train_len]-ft[:simtime_train_len]))/simtime_train_len
@@ -150,4 +153,4 @@ ax2[1].axvline(simtime[simtime_train_len-1],color='cyan')
 ax2[1].legend()
 plt.tight_layout()
 
-plt.savefig('Figure_net_1.png')
+plt.savefig('FORCE_Type_A_Torch.png')
