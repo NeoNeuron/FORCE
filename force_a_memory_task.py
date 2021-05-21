@@ -93,8 +93,9 @@ input = np.array([0])
 target = np.array([0])
 training_flag = np.array([False], dtype=bool)
 for i_strength, i_delay in zip(
-	# np.random.rand(n_targets)*(I_range[1]-I_range[0])+I_range[0],
-	(1.8, 3.0, 4.9, 3.8, 2.6, 4.6, 1.4, 1.05, 2.25, 4.2),
+	np.random.rand(n_targets)*(I_range[1]-I_range[0])+I_range[0],
+	# (1.8, 3.0, 4.9, 3.8, 2.6, 4.6, 1.4, 1.05, 2.25, 4.2),
+	# np.linspace(1.1,4.9,10),
 	np.random.rand(n_targets)*(I_delay_range[1]-I_delay_range[0])+I_delay_range[0],
 ):
 	input = np.append(input, np.ones(int(I_duration/dt))*i_strength)
@@ -141,7 +142,7 @@ for ti in np.arange(simtime_len):
 	z = W_out @ r
     
 	if ((ti+1) % learn_every) == 0: # and training_flag[ti]:
-		P = (1.0/alpha)*torch.eye(n_rec2out).to(device)
+		# P = (1.0/alpha)*torch.eye(n_rec2out).to(device)
 		# update the error for the linear readout
 		e = z-ft[ti]
 		# inplace update
