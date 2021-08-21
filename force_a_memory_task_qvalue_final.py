@@ -43,7 +43,7 @@ mpl.rcParams['lines.linewidth'] = 3
 mpl.rcParams['font.size'] = 16
 
 # load parameters
-with open('memory-task_10_cfg.json', 'r') as read_file:
+with open('memory-task_3_cfg.json', 'r') as read_file:
 	pm = json.load(read_file)
 n_targets = pm['n_targets']
 fname = f'memory-task_{n_targets:d}_net_hyper_pm.npz'
@@ -75,7 +75,26 @@ print('\tn_rec2out: %d'% n_rec2out)
 
 torch.cuda.synchronize()
 t0 = time.time()
-wo = torch.Tensor(training_dym_data['wt'][-1,:]).to(device)
+wo = training_dym_data['wt'][-1,:]
+# weight manipulation
+# %%
+from sklearn.decomposition import PCA
+# ft=training_dym_data['ft']
+# wt=training_dym_data['wt']
+# zt=training_dym_data['zt']
+xt=training_dym_data['xt']
+# %%
+pca = PCA(n_components=N)
+pca.fit(xt)
+
+w_reduce = pca.transform(wo.reshape((1,-1)))
+# print(w_reduce[0,:10])
+# perturb one of the eigen-component of readout weight
+w_reduce[0,200] = 0.0
+
+wo = pca.inverse_transform(w_reduce)
+wo = torch.Tensor(wo.flatten()).to(device)
+
 # generate targets:
 I_range = [1,5]
 i_delay=1100 #ms

@@ -43,7 +43,7 @@ mpl.rcParams['lines.linewidth'] = 3
 mpl.rcParams['font.size'] = 16
 
 # load parameters
-with open('memory-task_10_cfg.json', 'r') as read_file:
+with open('memory-task_3_cfg.json', 'r') as read_file:
 	pm = json.load(read_file)
 n_targets = pm['n_targets']
 fname = f'memory-task_{n_targets:d}_net_hyper_pm.npz'
@@ -61,7 +61,7 @@ n_input = pm['n_input']
 dt = pm['dt']
 tau = pm['tau']
 n_rec2out = pm['n_rec2out']
-n_test = 20
+n_test = 3
 
 # create tensor in CUDA
 M = torch.Tensor(M).to(device)
@@ -75,13 +75,16 @@ print('\tn_rec2out: %d'% n_rec2out)
 
 # generate targets:
 I_range = [1,5]
-I_duration=500 #ms
+I_duration=200 #ms
 I_delay_range=[500, 6000] #ms
 input = np.array([0])
 target = np.array([0])
-for i_strength, i_delay in zip(
-	np.random.rand(n_test)*(I_range[1]-I_range[0])+I_range[0],
-	np.random.rand(n_test)*(I_delay_range[1]-I_delay_range[0])+I_delay_range[0],
+for I_duration, i_strength, i_delay in zip(
+	(10, 200, 1000),
+	(1.8, 3.0, 4.9, ),
+	(6000, 6000, 6000, ),
+	# np.random.rand(n_test)*(I_range[1]-I_range[0])+I_range[0],
+	# np.random.rand(n_test)*(I_delay_range[1]-I_delay_range[0])+I_delay_range[0],
 ):
 	input = np.append(input, np.ones(int(I_duration/dt))*i_strength)
 	input = np.append(input, np.zeros(int(i_delay/dt)))
@@ -95,7 +98,7 @@ simtime = np.arange(0,ft.shape[0])*dt
 simtime_len = len(simtime)
 
 torch.manual_seed(382)
-x0 = training_dym_data['xt'][-1,:]
+x0 = training_dym_data['xt'][6000,:]
 x0 = torch.Tensor(x0).to(device)
 z0 = 0.5*torch.zeros(1).to(device)
 

@@ -45,7 +45,7 @@ mpl.rcParams['lines.linewidth'] = 3
 mpl.rcParams['font.size'] = 16
 
 # load parameters
-with open('memory-task_10_cfg.json', 'r') as read_file:
+with open('memory-task_3_cfg.json', 'r') as read_file:
 	pm = json.load(read_file)
 n_targets = pm['n_targets']
 fname = f'memory-task_{n_targets:d}_net_hyper_pm.npz'
@@ -63,7 +63,7 @@ n_input = pm['n_input']
 dt = pm['dt']
 tau = pm['tau']
 n_rec2out = pm['n_rec2out']
-n_test = 10
+n_test = 3
 
 # create tensor in CUDA
 M = torch.Tensor(M).to(device)
