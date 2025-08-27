@@ -1,3 +1,4 @@
+#%%
 # FORCE.py
 #
 # This function generates the sum of 4 sine waves in figure 2D using the architecture of figure 1A with the RLS
@@ -25,18 +26,18 @@ else:                              #
 mpl.rcParams['lines.linewidth'] = 3
 mpl.rcParams['font.size'] = 14
 mpl.rcParams['font.weight'] = 'bold'
-
+#%%
 param = {}
 torch.cuda.synchronize()
 t0 = time.time()
-N = param['N'] = 1000
+N = param['N'] = 400
 p = param['p'] = 0.1
 g = param['g'] = 1.5		# g greater than 1 leads to chaotic networks.
 alpha = param['alpha'] = 1.0
 nsecs = param['nsecs'] = 4000
 nsecs_train = param['nsecs_train'] = 2000
 dt = param['dt'] = 0.1
-learn_every = param['learn_every'] = 2
+learn_every = param['learn_every'] = 1
 
 # sparse matrix M
 M = np.random.rand(N,N)
@@ -100,6 +101,8 @@ for ti in np.arange(len(simtime)):
 		# update inverse correlation matrix
 		k = P @ r
 		rPr = r @ k
+		# if ti<100:
+		# 	print(rPr)
 		c = 1.0/(1.0 + rPr)
 		P -= c * torch.outer(k,k)
 		
@@ -109,6 +112,8 @@ for ti in np.arange(len(simtime)):
 		# update the output weights
 		dw = -e*k*c	
 		wo += dw
+	elif ti == simtime_train_len:
+		z += 0.5
     
     # Store the output of the system.
 	zt[ti] = z
@@ -121,12 +126,14 @@ print(f'evolve dynamics takes {time.time()-t0:.3f} s')
 ft_cpu = np.array(ft.cpu(), dtype=float)
 wt_cpu = np.array(wt.cpu(), dtype=float)
 zt_cpu = np.array(zt.cpu(), dtype=float)
+#%%
 with open(f'single-task_cfg.json', 'w') as write_file:
     json.dump(param, write_file, indent=2)
 np.savez('single-task_training_dynamics.npz', ft=ft_cpu, wt=wt_cpu, zt = zt_cpu)
 
 np.savez('single-task_net_hyper_pm.npz', Jgg=M.cpu(), wf = wf.cpu())
 
+#%%
 # print training error
 error_avg = torch.sum(torch.abs(zt[:simtime_train_len]-ft[:simtime_train_len]))/simtime_train_len
 print(f'Training MAE:  {error_avg.cpu():3f}')    
@@ -152,5 +159,7 @@ ax2[1].set_xlim(0, nsecs)
 ax2[1].axvline(simtime[simtime_train_len-1],color='cyan')
 ax2[1].legend()
 plt.tight_layout()
+ax2[1].set_xlim(1900,2100)
 
 plt.savefig('FORCE_Type_A_Torch.png')
+# %%
